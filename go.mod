@@ -6,4 +6,4 @@ require (
 	github.com/test-go/testify v1.1.4
 )
 
-go 1.13
+go 1.18
