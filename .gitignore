@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+duplicatefinder
 
 # Test binary, build with `go test -c`
 *.test
