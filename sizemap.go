@@ -1,19 +1,35 @@
 package main
 
 import (
-	"container/list"
-	"io/ioutil"
-	"log"
-	"os"
+	"fmt"
+	"io/fs"
+	"path/filepath"
 )
 
 // SizeMap is for finding files of same size.
-type SizeMap map[int64]*list.List
+type SizeMap map[int64][]string
 
-// CreateSizeMap creates a SizeMap for finding groups of files of smae size.
+// CreateSizeMap creates a SizeMap for finding groups of files of same size.
 func CreateSizeMap(dir string) SizeMap {
 	sm := SizeMap{}
-	sm.traverseDir(dir)
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			fmt.Printf("Warning: Could not access %s: %s\n", path, err)
+			return filepath.SkipDir
+		}
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				fmt.Printf("Warning: Could not get info for %s: %s\n", path, err)
+				return nil
+			}
+			sm.add(info.Size(), path)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("An unexpected error occurred: %s\n", err)
+	}
 	return sm
 }
 
@@ -21,31 +37,13 @@ func CreateSizeMap(dir string) SizeMap {
 func (sm SizeMap) CountCandidates() int {
 	counter := 0
 	for _, filenameList := range sm {
-		if filenameList.Len() > 1 {
-			counter += filenameList.Len()
+		if len(filenameList) > 1 {
+			counter += len(filenameList)
 		}
 	}
 	return counter
 }
 
-func (sm SizeMap) traverseDir(dir string) {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Panic(err)
-	}
-	for _, f := range files {
-		if f.IsDir() {
-			sm.traverseDir(dir + "/" + f.Name())
-		} else {
-			sm.traverseFile(f, dir+"/"+f.Name())
-		}
-	}
-}
-func (sm SizeMap) traverseFile(fileinfo os.FileInfo, filename string) {
-	var l = sm[fileinfo.Size()]
-	if l == nil {
-		l = &list.List{}
-		sm[fileinfo.Size()] = l
-	}
-	l.PushBack(filename)
+func (sm SizeMap) add(size int64, path string) {
+	sm[size] = append(sm[size], path)
 }

@@ -2,13 +2,13 @@ package main
 
 import (
 	"bytes"
-	"container/list"
 	"crypto/md5"
 	"fmt"
 	"io"
-	"log"
 	"os"
 )
+
+const chunkSize = 4096
 
 // EqualFile holds the checksum and size of the equal files.
 type EqualFile struct {
@@ -17,87 +17,144 @@ type EqualFile struct {
 }
 
 // DuplicateMap holds duplicate files.
-type DuplicateMap map[EqualFile]*list.List
+type DuplicateMap map[EqualFile][]string
 
 // CreateDuplicationMap creates a duplicatin map objekt.
 func CreateDuplicationMap(sm *SizeMap, threads int, verbose bool) DuplicateMap {
-	results := RunWorkers(
+	// Partial hash calculation
+	partialResults := RunWorkers(
 		func(jobs chan DataMap) {
 			for size, filenameList := range *sm {
-				createJobs(size, filenameList, jobs)
+				if len(filenameList) > 1 {
+					for _, filename := range filenameList {
+						jobs <- DataMap{"filename": filename, "size": size}
+					}
+				}
 			}
 		},
 		func(job DataMap) DataMap {
-			return findChkSumForFile(job["filename"].(string), verbose)
+			filename := job["filename"].(string)
+			partialHash, err := partialHash(filename)
+			if err != nil {
+				if verbose {
+					fmt.Printf("Warning: Could not calculate partial hash for %s: %s\n", filename, err)
+				}
+				return nil
+			}
+			job["partialHash"] = partialHash
+			return job
 		},
 		threads)
+
+	// Group by partial hash
+	partialMap := make(map[string][]DataMap)
+	for res := range partialResults {
+		if res != nil {
+			partialHash := res["partialHash"].(string)
+			partialMap[partialHash] = append(partialMap[partialHash], res)
+		}
+	}
+
+	// Full hash calculation for files with same partial hash
+	fullResults := RunWorkers(
+		func(jobs chan DataMap) {
+			for _, jobList := range partialMap {
+				if len(jobList) > 1 {
+					for _, job := range jobList {
+						jobs <- job
+					}
+				}
+			}
+		},
+		func(job DataMap) DataMap {
+			filename := job["filename"].(string)
+			fullHash, err := fullHash(filename)
+			if err != nil {
+				if verbose {
+					fmt.Printf("Warning: Could not calculate full hash for %s: %s\n", filename, err)
+				}
+				return nil
+			}
+			job["fullHash"] = fullHash
+			return job
+		},
+		threads)
+
 	dupMap := DuplicateMap{}
-	dupMap.createResult(sm, results, verbose)
+	dupMap.createResult(fullResults, verbose)
 	return dupMap
 }
 
-func (dupMap DuplicateMap) createResult(sm *SizeMap, results chan DataMap, verbose bool) {
-	numFiles := sm.CountCandidates()
-	counter := 1
+func (dupMap DuplicateMap) createResult(results chan DataMap, verbose bool) {
 	for res := range results {
-		if verbose {
-			fmt.Printf("\rChecking %d of %d files.", counter, numFiles)
+		if res == nil {
+			continue
 		}
-		counter++
-		key := EqualFile{res["chksum"].(string), res["size"].(int64)}
-		sameChkSumList := dupMap[key]
 
-		if sameChkSumList == nil {
-			sameChkSumList = &list.List{}
-			dupMap[key] = sameChkSumList
-		}
-		sameChkSumList.PushBack(res["filename"])
-	}
-	if verbose {
-		fmt.Println()
+		filename := res["filename"].(string)
+		size := res["size"].(int64)
+		chksum := res["fullHash"].(string)
+
+		key := EqualFile{chksum, size}
+		dupMap[key] = append(dupMap[key], filename)
 	}
 }
 
-func createJobs(size int64, filenameList *list.List, jobs chan DataMap) {
-	if filenameList.Len() > 1 {
-		for filename := filenameList.Front(); filename != nil; filename = filename.Next() {
-			jobs <- DataMap{"filename": filename.Value.(string), "size": size}
+func createJobs(size int64, filenameList []string, jobs chan DataMap) {
+	if len(filenameList) > 1 {
+		for _, filename := range filenameList {
+			jobs <- DataMap{"filename": filename, "size": size}
 		}
 	}
 }
 
 func bytesToHash(bytes []byte) string {
-	hashString := ""
-	for _, b := range bytes {
-		hashString += fmt.Sprintf("%02x", b)
-	}
-	return hashString
+	return fmt.Sprintf("%x", bytes)
 }
 
-func findChkSumForFile(filename string, verbose bool) DataMap {
+func partialHash(filename string) (string, error) {
 	f, err := os.Open(filename)
 	if err != nil {
-		if verbose {
-			fmt.Printf("Got error reading %s: %s\n", filename, err)
-		}
+		return "", err
+	}
+	defer f.Close()
+
+	h := md5.New()
+	chunk := make([]byte, chunkSize)
+	bytesRead, err := f.Read(chunk)
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	_, err = h.Write(chunk[:bytesRead])
+	if err != nil {
+		return "", err
+	}
+
+	return bytesToHash(h.Sum(nil)), nil
+}
+
+func fullHash(filename string) (string, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return "", err
 	}
 	defer f.Close()
 	h := md5.New()
-	size, err := io.Copy(h, f)
-	if err != nil {
-		log.Fatal(err)
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
 	}
-	return DataMap{"chksum": bytesToHash(h.Sum(nil)), "size": size, "filename": filename}
+	return bytesToHash(h.Sum(nil)), nil
 }
 
 func (dupMap DuplicateMap) dump() string {
 	var buffer bytes.Buffer
 
 	for key, filelist := range dupMap {
-		if filelist.Len() > 1 {
+		if len(filelist) > 1 {
 			fmt.Fprintf(&buffer, "Same files: (size: %d)\n", key.Size)
-			for f := filelist.Front(); f != nil; f = f.Next() {
-				fmt.Fprintf(&buffer, "  ->  %s\n", f.Value.(string))
+			for _, f := range filelist {
+				fmt.Fprintf(&buffer, "  ->  %s\n", f)
 			}
 			fmt.Fprintln(&buffer)
 		}
