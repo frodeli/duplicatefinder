@@ -2,9 +2,9 @@ package main
 
 import (
 	"container/list"
-	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 // SizeMap is for finding files of same size.
@@ -29,15 +29,19 @@ func (sm SizeMap) CountCandidates() int {
 }
 
 func (sm SizeMap) traverseDir(dir string) {
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		log.Panic(err)
 	}
 	for _, f := range files {
 		if f.IsDir() {
-			sm.traverseDir(dir + "/" + f.Name())
+			sm.traverseDir(filepath.Join(dir, f.Name()))
 		} else {
-			sm.traverseFile(f, dir+"/"+f.Name())
+			info, err := f.Info()
+			if err != nil {
+				log.Panic(err)
+			}
+			sm.traverseFile(info, filepath.Join(dir, f.Name()))
 		}
 	}
 }

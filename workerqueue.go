@@ -4,21 +4,25 @@ import (
 	"sync"
 )
 
-// DataMap is a map containing data sent in and out of worker queue.
-type DataMap map[string]interface{}
+// ChecksumItem holds file information passed between worker queue stages.
+type ChecksumItem struct {
+	Filename string
+	Size     int64
+	Chksum   string
+}
 
-// Provider is a function that send data into a worker queue.
-type Provider func(jobs chan DataMap)
+// Provider is a function that sends jobs into a worker queue.
+type Provider func(jobs chan ChecksumItem)
 
-// Consumer is a function that consums data sent into a worker queue.
-type Consumer func(job DataMap) DataMap
+// Consumer is a function that processes a job and returns a result.
+type Consumer func(job ChecksumItem) ChecksumItem
 
-// RunWorkers starts workers with given provider and consumer fucntions. The work in the consumers are
+// RunWorkers starts workers with given provider and consumer functions. The work in the consumers are
 // spread across a given number of threads.
-func RunWorkers(provider Provider, consumer Consumer, threads int) chan DataMap {
+func RunWorkers(provider Provider, consumer Consumer, threads int) chan ChecksumItem {
 
-	jobs := make(chan DataMap)
-	results := make(chan DataMap)
+	jobs := make(chan ChecksumItem)
+	results := make(chan ChecksumItem)
 
 	// create jobs
 	go func() {

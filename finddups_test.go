@@ -2,7 +2,7 @@ package main
 
 import (
 	"container/list"
-	"reflect"
+	"encoding/hex"
 	"runtime"
 	"strings"
 	"testing"
@@ -19,24 +19,25 @@ func TestEqualsFilesShouldGiveDups(t *testing.T) {
 	sm[4] = &l
 
 	// Execute
-	var dupMap = CreateDuplicationMap(&sm, runtime.NumCPU(), false)
+	dupMap := CreateDuplicationMap(&sm, runtime.NumCPU(), false)
 
 	// Verify
-	var keys = reflect.ValueOf(dupMap).MapKeys()
-	assert.Equal(t, 1, len(keys))
-	assert.Equal(t, 2, dupMap[keys[0].Interface().(EqualFile)].Len())
+	assert.Equal(t, 1, len(dupMap))
+	for _, filelist := range dupMap {
+		assert.Equal(t, 2, filelist.Len())
+	}
 }
 
 func TestTextOutput(t *testing.T) {
 	// Setup
-	var sm = SizeMap{}
-	var l = &list.List{}
+	sm := SizeMap{}
+	l := &list.List{}
 	l.PushBack("testdata/a")
 	l.PushBack("testdata/subdir/c")
 	sm[4] = l
 
 	// Execute
-	var dupMap = CreateDuplicationMap(&sm, runtime.NumCPU(), false)
+	dupMap := CreateDuplicationMap(&sm, runtime.NumCPU(), false)
 	output := dupMap.dump()
 
 	// Verify
@@ -48,6 +49,6 @@ func TestTextOutput(t *testing.T) {
 }
 
 func TestBytesToHash(t *testing.T) {
-	hash := bytesToHash([]byte{1, 2, 3, 255})
+	hash := hex.EncodeToString([]byte{1, 2, 3, 255})
 	assert.Equal(t, "010203ff", hash)
 }

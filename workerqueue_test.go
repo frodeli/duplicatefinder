@@ -9,23 +9,18 @@ import (
 func TestWorkerQueue(t *testing.T) {
 
 	results := RunWorkers(
-		func(jobs chan DataMap) {
-			job := DataMap{}
-			job["foo"] = "bar"
-			jobs <- job
+		func(jobs chan ChecksumItem) {
+			jobs <- ChecksumItem{Filename: "bar"}
 		},
-		func(job DataMap) DataMap {
-			result := DataMap{}
-			if job["foo"] == "bar" {
-				result["ok"] = "true"
-				return result
+		func(job ChecksumItem) ChecksumItem {
+			if job.Filename == "bar" {
+				return ChecksumItem{Chksum: "ok"}
 			}
-			result["ok"] = "false"
-			return result
+			return ChecksumItem{}
 		},
 		4)
 
 	for result := range results {
-		assert.Equal(t, "true", result["ok"])
+		assert.Equal(t, "ok", result.Chksum)
 	}
 }
