@@ -10,13 +10,16 @@ import (
 func findSameFiles(rootDir string, threads int, verbose bool) {
 	before := time.Now()
 	sizeMap := CreateSizeMap(rootDir)
-	between := time.Now()
-	dupMap := CreateDuplicationMap(&sizeMap, threads, verbose)
+	between1 := time.Now()
+	filteredMap := FilterByPartialHash(&sizeMap, threads)
+	between2 := time.Now()
+	dupMap := CreateDuplicationMap(&filteredMap, threads, verbose)
 	after := time.Now()
 	fmt.Print(dupMap.dump())
 
 	if verbose {
-		fmt.Printf("Time elapsed: %s (size) %s (checksum) %s (total)\n", between.Sub(before), after.Sub(between), after.Sub(before))
+		fmt.Printf("Time elapsed: %s (size) %s (partial) %s (checksum) %s (total)\n",
+			between1.Sub(before), between2.Sub(between1), after.Sub(between2), after.Sub(before))
 	}
 }
 

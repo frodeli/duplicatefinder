@@ -1,28 +1,27 @@
 package main
 
 import (
-	"container/list"
 	"log"
 	"os"
 	"path/filepath"
 )
 
-// SizeMap is for finding files of same size.
-type SizeMap map[int64]*list.List
+// SizeMap groups file paths by file size.
+type SizeMap map[int64][]string
 
-// CreateSizeMap creates a SizeMap for finding groups of files of smae size.
+// CreateSizeMap creates a SizeMap by walking dir recursively.
 func CreateSizeMap(dir string) SizeMap {
 	sm := SizeMap{}
 	sm.traverseDir(dir)
 	return sm
 }
 
-// CountCandidates count how many equal file candidates is in the map.
+// CountCandidates returns the number of files that share their size with at least one other file.
 func (sm SizeMap) CountCandidates() int {
 	counter := 0
-	for _, filenameList := range sm {
-		if filenameList.Len() > 1 {
-			counter += filenameList.Len()
+	for _, filenames := range sm {
+		if len(filenames) > 1 {
+			counter += len(filenames)
 		}
 	}
 	return counter
@@ -34,22 +33,15 @@ func (sm SizeMap) traverseDir(dir string) {
 		log.Panic(err)
 	}
 	for _, f := range files {
+		path := filepath.Join(dir, f.Name())
 		if f.IsDir() {
-			sm.traverseDir(filepath.Join(dir, f.Name()))
+			sm.traverseDir(path)
 		} else {
 			info, err := f.Info()
 			if err != nil {
 				log.Panic(err)
 			}
-			sm.traverseFile(info, filepath.Join(dir, f.Name()))
+			sm[info.Size()] = append(sm[info.Size()], path)
 		}
 	}
-}
-func (sm SizeMap) traverseFile(fileinfo os.FileInfo, filename string) {
-	var l = sm[fileinfo.Size()]
-	if l == nil {
-		l = &list.List{}
-		sm[fileinfo.Size()] = l
-	}
-	l.PushBack(filename)
 }

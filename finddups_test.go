@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"encoding/hex"
 	"runtime"
 	"strings"
@@ -12,29 +11,21 @@ import (
 
 func TestEqualsFilesShouldGiveDups(t *testing.T) {
 	// Setup
-	sm := SizeMap{}
-	l := list.List{}
-	l.PushBack("testdata/a")
-	l.PushBack("testdata/subdir/c")
-	sm[4] = &l
+	sm := SizeMap{4: []string{"testdata/a", "testdata/subdir/c"}}
 
 	// Execute
 	dupMap := CreateDuplicationMap(&sm, runtime.NumCPU(), false)
 
 	// Verify
 	assert.Equal(t, 1, len(dupMap))
-	for _, filelist := range dupMap {
-		assert.Equal(t, 2, filelist.Len())
+	for _, files := range dupMap {
+		assert.Equal(t, 2, len(files))
 	}
 }
 
 func TestTextOutput(t *testing.T) {
 	// Setup
-	sm := SizeMap{}
-	l := &list.List{}
-	l.PushBack("testdata/a")
-	l.PushBack("testdata/subdir/c")
-	sm[4] = l
+	sm := SizeMap{4: []string{"testdata/a", "testdata/subdir/c"}}
 
 	// Execute
 	dupMap := CreateDuplicationMap(&sm, runtime.NumCPU(), false)
@@ -45,7 +36,6 @@ func TestTextOutput(t *testing.T) {
 	assert.Equal(t, 5, len(lines))
 	assert.Contains(t, output, "testdata/a")
 	assert.Contains(t, output, "testdata/subdir/c")
-
 }
 
 func TestBytesToHash(t *testing.T) {
