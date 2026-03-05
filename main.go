@@ -27,7 +27,13 @@ func main() {
 	rootDir := flag.String("root", ".", "Root directory to search from.")
 	threads := flag.Int("threads", runtime.NumCPU(), "Number of threads used to compare files.")
 	verbose := flag.Bool("verbose", false, "Turn on more output.")
+	gui := flag.Bool("gui", false, "Launch graphical user interface.")
 	flag.Parse()
+
+	if *gui {
+		launchGUI()
+		return
+	}
 
 	findSameFiles(*rootDir, *threads, *verbose)
 }
